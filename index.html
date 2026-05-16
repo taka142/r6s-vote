@@ -4,14 +4,20 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>R6S カスタム投票</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: #0a0e1a; }
-  button:hover { opacity: 0.85; }
-  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  body {
+    background: linear-gradient(135deg, #fff0f5 0%, #fce4f0 50%, #f0e6ff 100%);
+    min-height: 100vh;
+    font-family: 'Noto Sans JP', sans-serif;
+  }
+  button { transition: all 0.2s; }
+  button:hover { transform: translateY(-1px); opacity: 0.9; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
 </style>
 </head>
 <body>
@@ -42,40 +48,44 @@ const MAPS = [
 ];
 
 const PHASES = {
-  WAITING_MAP: "waiting_map",
-  MAP_VOTING: "map_voting",
-  MAP_RESULT: "map_result",
-  MAP_RUNOFF: "map_runoff",
-  MAP_RUNOFF_RESULT: "map_runoff_result",
-  WAITING_MVP: "waiting_mvp",
-  MVP_VOTING: "mvp_voting",
-  MVP_RESULT: "mvp_result",
+  WAITING_MAP: "waiting_map", MAP_VOTING: "map_voting", MAP_RESULT: "map_result",
+  MAP_RUNOFF: "map_runoff", MAP_RUNOFF_RESULT: "map_runoff_result",
+  WAITING_MVP: "waiting_mvp", MVP_VOTING: "mvp_voting", MVP_RESULT: "mvp_result",
 };
 
 const phaseLabels = {
-  waiting_map: "MAP投票 待機中",
-  map_voting: "MAP投票 受付中",
-  map_result: "MAP投票 結果発表",
-  map_runoff: "MAP決選投票 受付中",
-  map_runoff_result: "MAP決選投票 結果発表",
-  waiting_mvp: "MVP投票 待機中",
-  mvp_voting: "MVP投票 受付中",
-  mvp_result: "MVP投票 結果発表",
+  waiting_map:"MAP投票 待機中", map_voting:"MAP投票 受付中", map_result:"MAP投票 結果発表",
+  map_runoff:"MAP決選投票 受付中", map_runoff_result:"MAP決選投票 結果発表",
+  waiting_mvp:"MVP投票 待機中", mvp_voting:"MVP投票 受付中", mvp_result:"MVP投票 結果発表",
 };
 
-const defaultState = { phase: "waiting_map", mapVotes: {}, runoffVotes: {}, runoffMaps: [], mvpVotes: {} };
+const defaultState = { phase:"waiting_map", mapVotes:{}, runoffVotes:{}, runoffMaps:[], mvpVotes:{} };
 
 async function fetchState() {
-  const r = await fetch(BIN_URL + "/latest", {
-    headers: { "X-Master-Key": API_KEY, "X-Access-Key": API_KEY }
-  });
+  const r = await fetch(BIN_URL+"/latest", { headers:{"X-Master-Key":API_KEY,"X-Access-Key":API_KEY} });
   const d = await r.json();
-  return { ...defaultState, ...(d.record || {}) };
+  return { ...defaultState, ...(d.record||{}) };
+}
+async function saveState(state) {
+  await fetch(BIN_URL, { method:"PUT", headers:HEADERS, body:JSON.stringify(state) });
 }
 
-async function saveState(state) {
-  await fetch(BIN_URL, { method: "PUT", headers: HEADERS, body: JSON.stringify(state) });
-}
+const C = {
+  bg: "linear-gradient(135deg, #fff0f5 0%, #fce4f0 50%, #f0e6ff 100%)",
+  pink: "#e91e8c",
+  pinkLight: "#ff6eb4",
+  pinkPale: "#fff0f8",
+  purple: "#9c4dcc",
+  purpleLight: "#ce93d8",
+  white: "#ffffff",
+  gray: "#9e9e9e",
+  grayLight: "#f5f5f5",
+  text: "#4a2040",
+  textSub: "#b07090",
+  red: "#e53935",
+  blue: "#5c6bc0",
+  green: "#43a047",
+};
 
 function App() {
   const [state, setState] = useState(defaultState);
@@ -94,140 +104,154 @@ function App() {
     setLoading(false);
   }, []);
 
-  useEffect(() => {
-    load();
-    const iv = setInterval(load, 3000);
-    return () => clearInterval(iv);
-  }, [load]);
+  useEffect(() => { load(); const iv = setInterval(load, 3000); return () => clearInterval(iv); }, [load]);
 
-  const update = async (newState) => {
-    setSaving(true);
-    setState(newState);
-    await saveState(newState);
-    setSaving(false);
-  };
-
+  const update = async (ns) => { setSaving(true); setState(ns); await saveState(ns); setSaving(false); };
   const handleAdminLogin = () => {
     if (adminInput === ADMIN_PASSWORD) { setAdminAuthed(true); setAdminError(""); setView("admin"); }
     else setAdminError("パスワードが違います");
   };
+  const resetAll = async () => { if (window.confirm("全データをリセットしますか？")) await update(defaultState); };
+  const resetMap = async () => { if (window.confirm("MAP投票をリセットしますか？")) await update({...state, phase:PHASES.WAITING_MAP, mapVotes:{}, runoffVotes:{}, runoffMaps:[]}); };
 
-  const resetAll = async () => {
-    if (window.confirm("全データをリセットしますか？")) await update(defaultState);
-  };
-
-  const resetMap = async () => {
-    if (window.confirm("MAP投票をリセットしますか？")) await update({ ...state, phase: PHASES.WAITING_MAP, mapVotes: {}, runoffVotes: {}, runoffMaps: [] });
-  };
-
-  // MAP集計
   const mapTally = () => {
-    const t = {};
-    MAPS.forEach(m => t[m] = 0);
-    Object.values(state.mapVotes).forEach(m => t[m] = (t[m]||0)+1);
+    const t = {}; MAPS.forEach(m => t[m]=0);
+    Object.values(state.mapVotes).forEach(m => t[m]=(t[m]||0)+1);
     return Object.entries(t).sort((a,b) => b[1]-a[1]);
   };
-
-  // 決選投票が必要か判定 & 対象MAP取得
   const getRunoffMaps = () => {
-    const t = mapTally();
-    const top = t[0]?.[1] || 0;
-    if (top === 0) return [];
-    const tied = t.filter(([,c]) => c === top).map(([m]) => m);
+    const t = mapTally(); const top = t[0]?.[1]||0;
+    if (!top) return [];
+    const tied = t.filter(([,c]) => c===top).map(([m]) => m);
     return tied.length >= 2 ? tied : [];
   };
-
-  // 決選集計
   const runoffTally = () => {
-    const t = {};
-    (state.runoffMaps || []).forEach(m => t[m] = 0);
-    Object.values(state.runoffVotes || {}).forEach(m => t[m] = (t[m]||0)+1);
+    const t = {}; (state.runoffMaps||[]).forEach(m => t[m]=0);
+    Object.values(state.runoffVotes||{}).forEach(m => t[m]=(t[m]||0)+1);
     return Object.entries(t).sort((a,b) => b[1]-a[1]);
   };
-
-  // MVP集計
   const mvpTally = () => {
-    const t = {};
-    PLAYERS.forEach(p => t[p] = 0);
-    Object.values(state.mvpVotes).forEach(arr => arr.forEach(p => t[p] = (t[p]||0)+1));
+    const t = {}; PLAYERS.forEach(p => t[p]=0);
+    Object.values(state.mvpVotes).forEach(arr => arr.forEach(p => t[p]=(t[p]||0)+1));
     return Object.entries(t).sort((a,b) => b[1]-a[1]);
   };
 
-  const maxMap = mapTally()[0]?.[1] || 0;
-  const maxRunoff = runoffTally()[0]?.[1] || 0;
-  const maxMvp = mvpTally()[0]?.[1] || 0;
+  const maxMap = mapTally()[0]?.[1]||0;
+  const maxRunoff = runoffTally()[0]?.[1]||0;
   const { phase } = state;
+  const isVoting = [PHASES.MAP_VOTING,PHASES.MVP_VOTING,PHASES.MAP_RUNOFF].includes(phase);
+  const isResult = [PHASES.MAP_RESULT,PHASES.MVP_RESULT,PHASES.MAP_RUNOFF_RESULT].includes(phase);
 
   const submitMapVote = async () => {
     if (!mapSelection) return;
-    const key = phase === PHASES.MAP_RUNOFF ? "runoffVotes" : "mapVotes";
-    const ns = { ...state, [key]: { ...state[key], [selectedPlayer]: mapSelection } };
-    await update(ns);
+    const key = phase===PHASES.MAP_RUNOFF ? "runoffVotes" : "mapVotes";
+    await update({...state, [key]:{...state[key],[selectedPlayer]:mapSelection}});
     setView("voted");
   };
-
   const submitMvpVote = async () => {
-    if (mvpSelection.length !== 2) return;
-    const ns = { ...state, mvpVotes: { ...state.mvpVotes, [selectedPlayer]: mvpSelection } };
-    await update(ns);
+    if (mvpSelection.length!==2) return;
+    await update({...state, mvpVotes:{...state.mvpVotes,[selectedPlayer]:mvpSelection}});
     setView("voted");
   };
+  const toggleMvp = (p) => setMvpSelection(sel =>
+    sel.includes(p) ? sel.filter(x=>x!==p) : sel.length<2 ? [...sel,p] : sel
+  );
 
-  const toggleMvp = (p) => {
-    setMvpSelection(sel =>
-      sel.includes(p) ? sel.filter(x => x !== p) : sel.length < 2 ? [...sel, p] : sel
-    );
-  };
-
+  // ---- Styles ----
   const s = {
-    wrap: { minHeight:"100vh", background:"#0a0e1a", color:"#e8eaf0", fontFamily:"'Segoe UI',sans-serif", display:"flex", flexDirection:"column", alignItems:"center", padding:"20px 12px" },
-    card: { background:"#131929", border:"1px solid #1e2d4a", borderRadius:12, padding:"24px 20px", width:"100%", maxWidth:480, marginBottom:16 },
-    title: { color:"#f4a227", fontSize:22, fontWeight:700, marginBottom:4, textAlign:"center", letterSpacing:1 },
-    sub: { color:"#7a8baa", fontSize:13, textAlign:"center", marginBottom:20 },
-    btn: (c="#f4a227") => ({ background:c, color:c==="#f4a227"?"#0a0e1a":"#fff", border:"none", borderRadius:8, padding:"10px 20px", fontWeight:700, fontSize:15, cursor:"pointer", margin:"4px" }),
-    btnGhost: { background:"transparent", color:"#7a8baa", border:"1px solid #2a3a5a", borderRadius:8, padding:"8px 16px", fontSize:13, cursor:"pointer" },
-    input: { background:"#0d1525", border:"1px solid #2a3a5a", borderRadius:8, color:"#e8eaf0", padding:"10px 14px", fontSize:15, width:"100%", marginBottom:8 },
+    wrap: { minHeight:"100vh", background:C.bg, display:"flex", flexDirection:"column", alignItems:"center", padding:"24px 14px" },
+    card: {
+      background:"rgba(255,255,255,0.85)",
+      backdropFilter:"blur(10px)",
+      border:"1.5px solid rgba(233,30,140,0.15)",
+      borderRadius:20,
+      padding:"28px 22px",
+      width:"100%", maxWidth:480, marginBottom:16,
+      boxShadow:"0 4px 24px rgba(233,30,140,0.08)"
+    },
+    title: { color:C.pink, fontSize:22, fontWeight:700, marginBottom:4, textAlign:"center", letterSpacing:1 },
+    sub: { color:C.textSub, fontSize:13, textAlign:"center", marginBottom:20 },
+    btn: (c=C.pink) => ({
+      background:`linear-gradient(135deg, ${c}, ${c}cc)`,
+      color:"#fff", border:"none", borderRadius:50,
+      padding:"11px 22px", fontWeight:700, fontSize:14,
+      cursor:"pointer", margin:"4px",
+      boxShadow:`0 2px 12px ${c}44`,
+      fontFamily:"'Noto Sans JP',sans-serif"
+    }),
+    btnGhost: {
+      background:"transparent", color:C.textSub,
+      border:`1.5px solid ${C.purpleLight}`, borderRadius:50,
+      padding:"9px 18px", fontSize:13, cursor:"pointer",
+      fontFamily:"'Noto Sans JP',sans-serif"
+    },
+    input: {
+      background:"#fff8fc", border:`1.5px solid ${C.purpleLight}`,
+      borderRadius:12, color:C.text, padding:"10px 14px",
+      fontSize:15, width:"100%", marginBottom:8,
+      fontFamily:"'Noto Sans JP',sans-serif", outline:"none"
+    },
     grid: { display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:12 },
-    optBtn: (sel) => ({ background:sel?"#f4a227":"#0d1525", color:sel?"#0a0e1a":"#c0cce0", border:`1px solid ${sel?"#f4a227":"#2a3a5a"}`, borderRadius:8, padding:"10px 8px", fontSize:14, fontWeight:sel?700:400, cursor:"pointer", textAlign:"center" }),
-    badge: { display:"inline-block", background:"#f4a227", color:"#0a0e1a", borderRadius:20, padding:"2px 10px", fontSize:12, fontWeight:700, marginLeft:6 },
-    phaseTag: (c="#1a2d4a") => ({ display:"inline-block", background:c, color:"#7ab8f5", borderRadius:20, padding:"4px 14px", fontSize:13, marginBottom:16 }),
-    bar: (pct,hi) => ({ height:10, borderRadius:5, background:hi?"#f4a227":"#2a3a5a", width:`${Math.max(pct*100,2)}%`, transition:"width .4s" }),
+    optBtn: (sel) => ({
+      background: sel ? `linear-gradient(135deg,${C.pink},${C.purple})` : "#fff8fc",
+      color: sel ? "#fff" : C.text,
+      border: `1.5px solid ${sel ? C.pink : C.purpleLight}`,
+      borderRadius:12, padding:"10px 8px", fontSize:13,
+      fontWeight: sel ? 700 : 400, cursor:"pointer", textAlign:"center",
+      fontFamily:"'Noto Sans JP',sans-serif",
+      boxShadow: sel ? `0 2px 8px ${C.pink}44` : "none"
+    }),
+    badge: {
+      display:"inline-block",
+      background:`linear-gradient(135deg,${C.pink},${C.purple})`,
+      color:"#fff", borderRadius:20, padding:"2px 10px",
+      fontSize:11, fontWeight:700, marginLeft:6
+    },
+    phaseTag: (c=C.pink) => ({
+      display:"inline-block", background:`${c}18`,
+      color:c, borderRadius:20, padding:"5px 16px",
+      fontSize:13, fontWeight:700, marginBottom:16,
+      border:`1px solid ${c}44`
+    }),
+    bar: (pct,hi) => ({
+      height:8, borderRadius:4,
+      background: hi ? `linear-gradient(90deg,${C.pink},${C.purple})` : "#f0d0e8",
+      width:`${Math.max(pct*100,2)}%`, transition:"width .4s"
+    }),
     row: { display:"flex", alignItems:"center", gap:8, marginBottom:8 },
-    label: { width:140, fontSize:14, color:"#c0cce0", flexShrink:0 },
-    count: { width:28, textAlign:"right", fontSize:13, color:"#f4a227", fontWeight:700 },
-    err: { color:"#e05c5c", fontSize:13, marginBottom:8 },
-    sep: { borderTop:"1px solid #1e2d4a", margin:"16px 0" },
-    sync: { fontSize:11, color:"#3a9a5c", textAlign:"center", marginBottom:8 },
+    label: { width:140, fontSize:13, color:C.text, flexShrink:0 },
+    count: { width:28, textAlign:"right", fontSize:13, color:C.pink, fontWeight:700 },
+    err: { color:C.red, fontSize:13, marginBottom:8 },
+    sep: { borderTop:`1px solid ${C.pink}22`, margin:"16px 0" },
+    sync: { fontSize:11, color:C.green, textAlign:"center", marginBottom:8 },
+    sectionTitle: { fontWeight:700, color:C.purple, marginBottom:10, fontSize:14 },
   };
-
-  const isVoting = phase === PHASES.MAP_VOTING || phase === PHASES.MVP_VOTING || phase === PHASES.MAP_RUNOFF;
-  const isResult = phase === PHASES.MAP_RESULT || phase === PHASES.MVP_RESULT || phase === PHASES.MAP_RUNOFF_RESULT;
-  const phaseColor = phase === PHASES.MAP_RUNOFF ? "#2d1a1a" : "#1a2d4a";
 
   if (loading) return (
     <div style={{...s.wrap, justifyContent:"center"}}>
-      <div style={{color:"#7ab8f5", fontSize:18}}>読み込み中...</div>
+      <div style={{color:C.pink, fontSize:18}}>読み込み中... 🌸</div>
     </div>
   );
 
-  if (view === "home") return (
+  if (view==="home") return (
     <div style={s.wrap}>
       <div style={s.card}>
-        <div style={s.title}>🎮 R6S カスタム投票</div>
+        <div style={{textAlign:"center",marginBottom:8,fontSize:28}}>🌸</div>
+        <div style={s.title}>R6S カスタム投票</div>
         <div style={s.sub}>Rainbow Six Siege</div>
-        <div style={{textAlign:"center",marginBottom:12}}>
-          <span style={s.phaseTag(phaseColor)}>{phaseLabels[phase]}</span>
+        <div style={{textAlign:"center",marginBottom:16}}>
+          <span style={s.phaseTag(phase===PHASES.MAP_RUNOFF?C.red:C.pink)}>{phaseLabels[phase]}</span>
         </div>
         {saving && <div style={s.sync}>同期中...</div>}
         <div style={{display:"flex",flexDirection:"column",gap:10,alignItems:"center"}}>
           {isVoting && (
-            <button style={s.btn(phase===PHASES.MAP_RUNOFF?"#e05c5c":"#f4a227")}
+            <button style={s.btn(phase===PHASES.MAP_RUNOFF?C.red:C.pink)}
               onClick={()=>{setView("player_select");setMvpSelection([]);setMapSelection(null);}}>
-              {phase===PHASES.MAP_RUNOFF?"🔥 決選投票する":"投票する"}
+              {phase===PHASES.MAP_RUNOFF?"🔥 決選投票する":"✨ 投票する"}
             </button>
           )}
           {isResult && (
-            <button style={s.btn("#4a9eff")} onClick={()=>setView("result")}>結果を見る</button>
+            <button style={s.btn(C.purple)} onClick={()=>setView("result")}>📊 結果を見る</button>
           )}
           <button style={s.btnGhost} onClick={()=>setView("admin_login")}>管理者</button>
         </div>
@@ -235,7 +259,7 @@ function App() {
     </div>
   );
 
-  if (view === "admin_login") return (
+  if (view==="admin_login") return (
     <div style={s.wrap}>
       <div style={s.card}>
         <div style={s.title}>🔐 管理者ログイン</div>
@@ -251,81 +275,79 @@ function App() {
     </div>
   );
 
-  if (view === "admin") {
+  if (view==="admin") {
     const runoffMaps = getRunoffMaps();
+    const showRunoffBtn = (phase===PHASES.MAP_RESULT||phase===PHASES.MAP_RUNOFF||phase===PHASES.MAP_RUNOFF_RESULT) && (runoffMaps.length>=2||(state.runoffMaps||[]).length>=2);
     return (
       <div style={s.wrap}>
         <div style={s.card}>
           <div style={s.title}>⚙️ 管理者パネル</div>
           <div style={{textAlign:"center",marginBottom:12}}>
-            <span style={s.phaseTag(phaseColor)}>{phaseLabels[phase]}</span>
+            <span style={s.phaseTag(phase===PHASES.MAP_RUNOFF?C.red:C.pink)}>{phaseLabels[phase]}</span>
           </div>
           {saving && <div style={s.sync}>同期中...</div>}
 
           <div style={s.sep}/>
-          <div style={{fontWeight:700,color:"#7ab8f5",marginBottom:10}}>MAP投票</div>
+          <div style={s.sectionTitle}>🗺️ MAP投票</div>
           <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
-            <button style={s.btn(phase===PHASES.MAP_VOTING?"#3a9a5c":"#f4a227")}
+            <button style={s.btn(phase===PHASES.MAP_VOTING?C.green:C.pink)}
               onClick={()=>update({...state,phase:PHASES.MAP_VOTING})} disabled={phase===PHASES.MAP_VOTING||saving}>
               MAP投票 開始
             </button>
-            <button style={s.btn("#c0392b")}
+            <button style={s.btn(C.red)}
               onClick={()=>update({...state,phase:PHASES.MAP_RESULT})} disabled={phase!==PHASES.MAP_VOTING||saving}>
               MAP投票 締め切り
             </button>
           </div>
-          <div style={{fontSize:13,color:"#7a8baa",marginBottom:4}}>
+          <div style={{fontSize:13,color:C.textSub,marginBottom:4}}>
             投票済み: {Object.keys(state.mapVotes).length} / {PLAYERS.length}名
           </div>
 
-          {/* 決選投票ボタン：1位同数の時のみ表示 */}
-          {(phase===PHASES.MAP_RESULT || phase===PHASES.MAP_RUNOFF || phase===PHASES.MAP_RUNOFF_RESULT) && (runoffMaps.length >= 2 || (state.runoffMaps||[]).length >= 2) && (
-            <>
-              <div style={{fontSize:13,color:"#e05c5c",margin:"8px 0"}}>
-                ⚠️ 1位同数：{runoffMaps.join("・")}
-              </div>
-              <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
-                <button style={s.btn(phase===PHASES.MAP_RUNOFF?"#3a9a5c":"#e05c5c")}
-                  onClick={()=>update({...state,phase:PHASES.MAP_RUNOFF,runoffMaps,runoffVotes:{}})}
-                  disabled={phase===PHASES.MAP_RUNOFF||saving}>
-                  🔥 決選投票 開始
-                </button>
-                <button style={s.btn("#c0392b")}
-                  onClick={()=>update({...state,phase:PHASES.MAP_RUNOFF_RESULT})}
-                  disabled={phase!==PHASES.MAP_RUNOFF||saving}>
-                  決選投票 締め切り
-                </button>
-              </div>
-              <div style={{fontSize:13,color:"#7a8baa",marginBottom:4}}>
-                決選投票済み: {Object.keys(state.runoffVotes||{}).length} / {PLAYERS.length}名
-              </div>
-            </>
-          )}
+          {showRunoffBtn && (<>
+            <div style={{fontSize:13,color:C.red,margin:"8px 0"}}>
+              ⚠️ 1位同数：{(runoffMaps.length>=2?runoffMaps:state.runoffMaps).join("・")}
+            </div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
+              <button style={s.btn(phase===PHASES.MAP_RUNOFF?C.green:C.red)}
+                onClick={()=>update({...state,phase:PHASES.MAP_RUNOFF,runoffMaps:runoffMaps.length>=2?runoffMaps:state.runoffMaps,runoffVotes:{}})}
+                disabled={phase===PHASES.MAP_RUNOFF||saving}>
+                🔥 決選投票 開始
+              </button>
+              <button style={s.btn(C.red)}
+                onClick={()=>update({...state,phase:PHASES.MAP_RUNOFF_RESULT})}
+                disabled={phase!==PHASES.MAP_RUNOFF||saving}>
+                決選投票 締め切り
+              </button>
+            </div>
+            <div style={{fontSize:13,color:C.textSub,marginBottom:4}}>
+              決選投票済み: {Object.keys(state.runoffVotes||{}).length} / {PLAYERS.length}名
+            </div>
+          </>)}
 
           <div style={s.sep}/>
-          <div style={{fontWeight:700,color:"#7ab8f5",marginBottom:10}}>MVP投票</div>
+          <div style={s.sectionTitle}>🏆 MVP投票</div>
           <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
-            <button style={s.btn(phase===PHASES.MVP_VOTING?"#3a9a5c":"#f4a227")}
+            <button style={s.btn(phase===PHASES.MVP_VOTING?C.green:C.pink)}
               onClick={()=>update({...state,phase:PHASES.MVP_VOTING})}
               disabled={phase===PHASES.MVP_VOTING||saving}>
               MVP投票 開始
             </button>
-            <button style={s.btn("#c0392b")}
+            <button style={s.btn(C.red)}
               onClick={()=>update({...state,phase:PHASES.MVP_RESULT})} disabled={phase!==PHASES.MVP_VOTING||saving}>
               MVP投票 締め切り
             </button>
           </div>
-          <div style={{fontSize:13,color:"#7a8baa",marginBottom:4}}>
+          <div style={{fontSize:13,color:C.textSub,marginBottom:4}}>
             投票済み: {Object.keys(state.mvpVotes).length} / {PLAYERS.length}名
           </div>
 
           <div style={s.sep}/>
           {isResult && (
-            <button style={{...s.btn("#4a9eff"),marginBottom:8}} onClick={()=>setView("result")}>結果を見る</button>
+            <button style={{...s.btn(C.blue),marginBottom:8}} onClick={()=>setView("result")}>📊 結果を見る</button>
           )}
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
             <button style={s.btn("#e67e22")} disabled={saving} onClick={resetMap}>🗺️ MAPリセット</button>
-            <button style={s.btn("#c0392b")} disabled={saving} onClick={resetAll}>🔄 全リセット</button>
+            <button style={s.btn(C.red)} disabled={saving} onClick={resetAll}>🔄 全リセット</button>
             <button style={s.btnGhost} onClick={()=>setView("home")}>ホームへ</button>
           </div>
         </div>
@@ -333,20 +355,17 @@ function App() {
     );
   }
 
-  if (view === "result") {
-    const mt = mapTally();
-    const rt = runoffTally();
-    const mvt = mvpTally();
+  if (view==="result") {
+    const mt = mapTally(), rt = runoffTally(), mvt = mvpTally();
     const showMap = [PHASES.MAP_RESULT,PHASES.MAP_RUNOFF,PHASES.MAP_RUNOFF_RESULT,PHASES.MVP_VOTING,PHASES.MVP_RESULT,PHASES.WAITING_MVP].includes(phase);
-    const showRunoff = [PHASES.MAP_RUNOFF_RESULT,PHASES.MVP_VOTING,PHASES.MVP_RESULT,PHASES.WAITING_MVP].includes(phase) && (state.runoffMaps||[]).length > 0;
+    const showRunoff = [PHASES.MAP_RUNOFF_RESULT,PHASES.MVP_VOTING,PHASES.MVP_RESULT,PHASES.WAITING_MVP].includes(phase)&&(state.runoffMaps||[]).length>0;
     const showMvp = phase===PHASES.MVP_RESULT;
     return (
       <div style={s.wrap}>
         <div style={s.card}>
           <div style={s.title}>📊 投票結果</div>
-
           {showMap && (<>
-            <div style={{fontWeight:700,color:"#f4a227",marginBottom:10}}>🗺️ MAP投票</div>
+            <div style={s.sectionTitle}>🗺️ MAP投票</div>
             {mt.map(([m,c])=>(
               <div key={m} style={s.row}>
                 <span style={s.label}>{m}{c===maxMap&&c>0&&<span style={s.badge}>1位</span>}</span>
@@ -356,39 +375,36 @@ function App() {
             ))}
             <div style={s.sep}/>
           </>)}
-
           {showRunoff && (<>
-            <div style={{fontWeight:700,color:"#e05c5c",marginBottom:10}}>🔥 決選投票</div>
+            <div style={{...s.sectionTitle,color:C.red}}>🔥 決選投票</div>
             {rt.map(([m,c])=>(
               <div key={m} style={s.row}>
-                <span style={s.label}>{m}{c===maxRunoff&&c>0&&<span style={{...s.badge,background:"#e05c5c"}}>決定</span>}</span>
+                <span style={s.label}>{m}{c===maxRunoff&&c>0&&<span style={{...s.badge,background:C.red}}>決定</span>}</span>
                 <div style={{flex:1}}><div style={s.bar(maxRunoff?c/maxRunoff:0,c===maxRunoff&&c>0)}/></div>
                 <span style={s.count}>{c}</span>
               </div>
             ))}
             <div style={s.sep}/>
           </>)}
-
           {showMvp && (<>
-            <div style={{fontWeight:700,color:"#f4a227",marginBottom:10}}>🏆 MVP</div>
+            <div style={s.sectionTitle}>🏆 MVP</div>
             {(() => {
-              const ranked = mvt.filter(([,c]) => c > 0);
-              if (ranked.length === 0) return <div style={{color:"#7a8baa"}}>まだ投票がありません</div>;
-              const first = ranked[0]?.[1] || 0;
-              const second = ranked.find(([,c]) => c < first)?.[1] || 0;
-              const firstList = ranked.filter(([,c]) => c === first);
-              const display = firstList.length >= 2 ? firstList : ranked.filter(([,c]) => c === first || c === second);
-              return display.map(([p,c]) => (
-                <div key={p} style={{...s.row, background:"#1a2d1a", borderRadius:8, padding:"10px 12px"}}>
-                  <span style={{flex:1, fontSize:16, fontWeight:700, color:"#f4a227"}}>{p}</span>
+              const ranked = mvt.filter(([,c])=>c>0);
+              if (!ranked.length) return <div style={{color:C.textSub}}>まだ投票がありません</div>;
+              const first = ranked[0][1];
+              const second = ranked.find(([,c])=>c<first)?.[1]||0;
+              const firstList = ranked.filter(([,c])=>c===first);
+              const display = firstList.length>=2 ? firstList : ranked.filter(([,c])=>c===first||c===second);
+              return display.map(([p,c])=>(
+                <div key={p} style={{...s.row, background:"linear-gradient(135deg,#fff0f8,#f8f0ff)", borderRadius:12, padding:"12px 14px", border:`1px solid ${C.pink}33`}}>
+                  <span style={{flex:1, fontSize:15, fontWeight:700, color:C.pink}}>{p}</span>
                   <span style={s.badge}>MVP</span>
-                  <span style={{...s.count, marginLeft:8}}>{c}票</span>
+                  <span style={{...s.count,marginLeft:8}}>{c}票</span>
                 </div>
               ));
             })()}
           </>)}
-
-          {!showMap&&!showRunoff&&!showMvp&&<div style={{color:"#7a8baa",textAlign:"center"}}>まだ結果はありません</div>}
+          {!showMap&&!showRunoff&&!showMvp&&<div style={{color:C.textSub,textAlign:"center"}}>まだ結果はありません</div>}
           <div style={s.sep}/>
           <button style={s.btnGhost} onClick={()=>setView(adminAuthed?"admin":"home")}>戻る</button>
         </div>
@@ -396,8 +412,8 @@ function App() {
     );
   }
 
-  if (view === "player_select") {
-    const isRunoff = phase === PHASES.MAP_RUNOFF;
+  if (view==="player_select") {
+    const isRunoff = phase===PHASES.MAP_RUNOFF;
     return (
       <div style={s.wrap}>
         <div style={s.card}>
@@ -426,22 +442,22 @@ function App() {
     );
   }
 
-  if (view === "map_vote") {
-    const isRunoff = phase === PHASES.MAP_RUNOFF;
+  if (view==="map_vote") {
+    const isRunoff = phase===PHASES.MAP_RUNOFF;
     const availableMaps = isRunoff ? (state.runoffMaps||[]) : MAPS;
     return (
       <div style={s.wrap}>
         <div style={s.card}>
           <div style={s.title}>{isRunoff?"🔥 決選MAP投票":"🗺️ MAP投票"}</div>
           <div style={s.sub}>{selectedPlayer} さん — マップを1つ選んでください</div>
-          {isRunoff && <div style={{color:"#e05c5c",textAlign:"center",fontSize:13,marginBottom:12}}>同数のMAPで再投票！</div>}
+          {isRunoff&&<div style={{color:C.red,textAlign:"center",fontSize:13,marginBottom:12}}>同数のMAPで再投票！</div>}
           <div style={s.grid}>
             {availableMaps.map(m=>(
               <button key={m} style={s.optBtn(mapSelection===m)} onClick={()=>setMapSelection(m)}>{m}</button>
             ))}
           </div>
           <div style={{display:"flex",gap:8}}>
-            <button style={s.btn(isRunoff?"#e05c5c":"#f4a227")} disabled={!mapSelection||saving} onClick={submitMapVote}>
+            <button style={s.btn(isRunoff?C.red:C.pink)} disabled={!mapSelection||saving} onClick={submitMapVote}>
               {saving?"送信中...":"投票する"}
             </button>
             <button style={s.btnGhost} onClick={()=>{setView("player_select");setMapSelection(null);}}>戻る</button>
@@ -451,13 +467,13 @@ function App() {
     );
   }
 
-  if (view === "mvp_vote") return (
+  if (view==="mvp_vote") return (
     <div style={s.wrap}>
       <div style={s.card}>
         <div style={s.title}>🏆 MVP投票</div>
         <div style={s.sub}>{selectedPlayer} さん — 2名を選んでください（自分以外）</div>
         <div style={{marginBottom:10,textAlign:"center"}}>
-          <span style={{color:mvpSelection.length===2?"#3a9a5c":"#f4a227",fontWeight:700}}>
+          <span style={{color:mvpSelection.length===2?C.green:C.pink,fontWeight:700}}>
             {mvpSelection.length} / 2 票
           </span>
         </div>
@@ -478,11 +494,11 @@ function App() {
     </div>
   );
 
-  if (view === "voted") return (
+  if (view==="voted") return (
     <div style={s.wrap}>
       <div style={s.card}>
         <div style={{textAlign:"center"}}>
-          <div style={{fontSize:48,marginBottom:12}}>✅</div>
+          <div style={{fontSize:48,marginBottom:12}}>🌸</div>
           <div style={s.title}>投票完了！</div>
           <div style={s.sub}>{selectedPlayer} さんの投票を受け付けました</div>
           <button style={s.btn()} onClick={()=>{setView("home");setSelectedPlayer(null);setMvpSelection([]);setMapSelection(null);}}>
