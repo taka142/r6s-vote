@@ -288,13 +288,26 @@ function App() {
           </>)}
           {showMvp && (<>
             <div style={{fontWeight:700,color:"#f4a227",marginBottom:10}}>🏆 MVP投票</div>
-            {mvt.map(([p,c],i)=>(
-              <div key={p} style={s.row}>
-                <span style={s.label}>{p}{i<2&&c>0&&<span style={s.badge}>TOP{i+1}</span>}</span>
-                <div style={{flex:1}}><div style={s.bar(maxMvp?c/maxMvp:0,i<2&&c>0)}/></div>
-                <span style={s.count}>{c}</span>
-              </div>
-            ))}
+            {(() => {
+              const first = mvt[0]?.[1] || 0;
+              const second = mvt.filter(([,c]) => c < first)[0]?.[1] || 0;
+              const display = mvt.filter(([,c]) => c > 0 && (c === first || c === second));
+              if (display.length === 0) return <div style={{color:"#7a8baa"}}>まだ投票がありません</div>;
+              return display.map(([p,c]) => {
+                const rank = c === first ? 1 : 2;
+                return (
+                  <div key={p} style={s.row}>
+                    <span style={s.label}>
+                      {p}<span style={{...s.badge, background: rank===1?"#f4a227":"#7ab8f5"}}>
+                        {rank === 1 ? "🥇 MVP" : "🥈 2位"}
+                      </span>
+                    </span>
+                    <div style={{flex:1}}><div style={s.bar(maxMvp?c/maxMvp:0, rank===1)}/></div>
+                    <span style={s.count}>{c}</span>
+                  </div>
+                );
+              });
+            })()}
           </>)}
           {!showMap&&!showMvp&&<div style={{color:"#7a8baa",textAlign:"center"}}>まだ結果はありません</div>}
           <div style={s.sep}/>
