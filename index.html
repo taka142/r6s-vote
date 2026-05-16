@@ -279,7 +279,7 @@ function App() {
           </div>
 
           {/* 決選投票ボタン：1位同数の時のみ表示 */}
-          {(phase===PHASES.MAP_RESULT || phase===PHASES.MAP_RUNOFF || phase===PHASES.MAP_RUNOFF_RESULT) && runoffMaps.length >= 2 && (
+          {(phase===PHASES.MAP_RESULT || phase===PHASES.MAP_RUNOFF || phase===PHASES.MAP_RUNOFF_RESULT) && (runoffMaps.length >= 2 || (state.runoffMaps||[]).length >= 2) && (
             <>
               <div style={{fontSize:13,color:"#e05c5c",margin:"8px 0"}}>
                 ⚠️ 1位同数：{runoffMaps.join("・")}
