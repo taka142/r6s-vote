@@ -25,6 +25,7 @@ const BIN_URL = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
 const HEADERS = {
   "Content-Type": "application/json",
   "X-Master-Key": API_KEY,
+  "X-Access-Key": API_KEY,
   "X-Bin-Versioning": "false"
 };
 
@@ -61,7 +62,9 @@ const phaseLabels = {
 const defaultState = { phase: "waiting_map", mapVotes: {}, mvpVotes: {} };
 
 async function fetchState() {
-  const r = await fetch(BIN_URL + "/latest", { headers: { "X-Master-Key": API_KEY } });
+  const r = await fetch(BIN_URL + "/latest", {
+    headers: { "X-Master-Key": API_KEY, "X-Access-Key": API_KEY }
+  });
   const d = await r.json();
   return d.record || defaultState;
 }
