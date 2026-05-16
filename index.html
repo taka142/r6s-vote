@@ -287,26 +287,24 @@ function App() {
             <div style={s.sep}/>
           </>)}
           {showMvp && (<>
-            <div style={{fontWeight:700,color:"#f4a227",marginBottom:10}}>🏆 MVP投票</div>
+            <div style={{fontWeight:700,color:"#f4a227",marginBottom:10}}>🏆 MVP</div>
             {(() => {
-              const first = mvt[0]?.[1] || 0;
-              const second = mvt.filter(([,c]) => c < first)[0]?.[1] || 0;
-              const display = mvt.filter(([,c]) => c > 0 && (c === first || c === second));
-              if (display.length === 0) return <div style={{color:"#7a8baa"}}>まだ投票がありません</div>;
-              return display.map(([p,c]) => {
-                const rank = c === first ? 1 : 2;
-                return (
-                  <div key={p} style={s.row}>
-                    <span style={s.label}>
-                      {p}<span style={{...s.badge, background: rank===1?"#f4a227":"#7ab8f5"}}>
-                        {rank === 1 ? "🥇 MVP" : "🥈 2位"}
-                      </span>
-                    </span>
-                    <div style={{flex:1}}><div style={s.bar(maxMvp?c/maxMvp:0, rank===1)}/></div>
-                    <span style={s.count}>{c}</span>
-                  </div>
-                );
-              });
+              const ranked = mvt.filter(([,c]) => c > 0);
+              if (ranked.length === 0) return <div style={{color:"#7a8baa"}}>まだ投票がありません</div>;
+              const first = ranked[0]?.[1] || 0;
+              const second = ranked.find(([,c]) => c < first)?.[1] || 0;
+              // 1位全員 + 2位該当者（1位が2名以上いれば2位なし）
+              const firstList = ranked.filter(([,c]) => c === first);
+              const display = firstList.length >= 2
+                ? firstList
+                : ranked.filter(([,c]) => c === first || c === second);
+              return display.map(([p,c]) => (
+                <div key={p} style={{...s.row, background:"#1a2d1a", borderRadius:8, padding:"10px 12px"}}>
+                  <span style={{fontSize:20, marginRight:8}}>🏆</span>
+                  <span style={{flex:1, fontSize:16, fontWeight:700, color:"#f4a227"}}>{p}</span>
+                  <span style={s.count}>{c}票</span>
+                </div>
+              ));
             })()}
           </>)}
           {!showMap&&!showMvp&&<div style={{color:"#7a8baa",textAlign:"center"}}>まだ結果はありません</div>}
