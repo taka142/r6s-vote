@@ -243,7 +243,7 @@ function App() {
         <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
           <button style={s.btn(phase===PHASES.MVP_VOTING?"#3a9a5c":"#f4a227")}
             onClick={()=>update({...state,phase:PHASES.MVP_VOTING})}
-            disabled={phase===PHASES.MVP_VOTING||phase===PHASES.WAITING_MAP||phase===PHASES.MAP_VOTING||saving}>
+            disabled={phase===PHASES.MVP_VOTING||saving}>
             MVP投票 開始
           </button>
           <button style={s.btn("#c0392b")}
@@ -258,7 +258,11 @@ function App() {
         {(phase===PHASES.MAP_RESULT||phase===PHASES.MVP_RESULT) && (
           <button style={{...s.btn("#4a9eff"),marginBottom:8}} onClick={()=>setView("result")}>結果を見る</button>
         )}
-        <div style={{display:"flex",gap:8}}>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          <button style={s.btn("#c0392b")} disabled={saving}
+            onClick={async()=>{ if(window.confirm("MAP投票をリセットしますか？")) await update({...state,phase:PHASES.WAITING_MAP,mapVotes:{}}); }}>
+            MAPリセット
+          </button>
           <button style={s.btn("#c0392b")} disabled={saving} onClick={resetAll}>全リセット</button>
           <button style={s.btnGhost} onClick={()=>setView("home")}>ホームへ</button>
         </div>
