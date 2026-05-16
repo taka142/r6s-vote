@@ -17,7 +17,16 @@
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const { useState } = React;
+const { useState, useEffect, useCallback } = React;
+
+const BIN_ID = "6a07f9e3adc21f119aa9b54c";
+const API_KEY = "$2a$10$CVKyQIK609NktJEV37008uR3R1sQeYuNuRuC4x/hb.tld7I8E0T4i";
+const BIN_URL = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
+const HEADERS = {
+  "Content-Type": "application/json",
+  "X-Master-Key": API_KEY,
+  "X-Bin-Versioning": "false"
+};
 
 const ADMIN_PASSWORD = "eKn/z7Fqh.kLs9%";
 
@@ -49,10 +58,20 @@ const phaseLabels = {
   mvp_result: "MVP投票 結果発表",
 };
 
+const defaultState = { phase: "waiting_map", mapVotes: {}, mvpVotes: {} };
+
+async function fetchState() {
+  const r = await fetch(BIN_URL + "/latest", { headers: { "X-Master-Key": API_KEY } });
+  const d = await r.json();
+  return d.record || defaultState;
+}
+
+async function saveState(state) {
+  await fetch(BIN_URL, { method: "PUT", headers: HEADERS, body: JSON.stringify(state) });
+}
+
 function App() {
-  const [phase, setPhase] = useState(PHASES.WAITING_MAP);
-  const [mapVotes, setMapVotes] = useState({});
-  const [mvpVotes, setMvpVotes] = useState({});
+  const [state, setState] = useState(defaultState);
   const [view, setView] = useState("home");
   const [adminAuthed, setAdminAuthed] = useState(false);
   const [adminInput, setAdminInput] = useState("");
@@ -60,24 +79,47 @@ function App() {
   const [selectedPlayer, setSelectedPlayer] = useState(null);
   const [mvpSelection, setMvpSelection] = useState([]);
   const [mapSelection, setMapSelection] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
-  const handleAdminLogin = () => {
-    if (adminInput === ADMIN_PASSWORD) {
-      setAdminAuthed(true); setAdminError(""); setView("admin");
-    } else { setAdminError("パスワードが違います"); }
+  const load = useCallback(async () => {
+    try { const s = await fetchState(); setState(s); } catch(e) { console.error(e); }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    load();
+    const iv = setInterval(load, 3000);
+    return () => clearInterval(iv);
+  }, [load]);
+
+  const update = async (newState) => {
+    setSaving(true);
+    setState(newState);
+    await saveState(newState);
+    setSaving(false);
   };
 
-  const resetAll = () => { setMapVotes({}); setMvpVotes({}); setPhase(PHASES.WAITING_MAP); };
+  const handleAdminLogin = () => {
+    if (adminInput === ADMIN_PASSWORD) { setAdminAuthed(true); setAdminError(""); setView("admin"); }
+    else setAdminError("パスワードが違います");
+  };
 
-  const submitMapVote = () => {
+  const resetAll = async () => {
+    if (window.confirm("全データをリセットしますか？")) await update(defaultState);
+  };
+
+  const submitMapVote = async () => {
     if (!mapSelection) return;
-    setMapVotes(v => ({ ...v, [selectedPlayer]: mapSelection }));
+    const ns = { ...state, mapVotes: { ...state.mapVotes, [selectedPlayer]: mapSelection } };
+    await update(ns);
     setView("voted");
   };
 
-  const submitMvpVote = () => {
+  const submitMvpVote = async () => {
     if (mvpSelection.length !== 2) return;
-    setMvpVotes(v => ({ ...v, [selectedPlayer]: mvpSelection }));
+    const ns = { ...state, mvpVotes: { ...state.mvpVotes, [selectedPlayer]: mvpSelection } };
+    await update(ns);
     setView("voted");
   };
 
@@ -90,19 +132,20 @@ function App() {
   const mapTally = () => {
     const t = {};
     MAPS.forEach(m => t[m] = 0);
-    Object.values(mapVotes).forEach(m => t[m] = (t[m] || 0) + 1);
-    return Object.entries(t).sort((a, b) => b[1] - a[1]);
+    Object.values(state.mapVotes).forEach(m => t[m] = (t[m]||0)+1);
+    return Object.entries(t).sort((a,b) => b[1]-a[1]);
   };
 
   const mvpTally = () => {
     const t = {};
     PLAYERS.forEach(p => t[p] = 0);
-    Object.values(mvpVotes).forEach(arr => arr.forEach(p => t[p] = (t[p] || 0) + 1));
-    return Object.entries(t).sort((a, b) => b[1] - a[1]);
+    Object.values(state.mvpVotes).forEach(arr => arr.forEach(p => t[p] = (t[p]||0)+1));
+    return Object.entries(t).sort((a,b) => b[1]-a[1]);
   };
 
   const maxMap = mapTally()[0]?.[1] || 0;
   const maxMvp = mvpTally()[0]?.[1] || 0;
+  const { phase } = state;
 
   const s = {
     wrap: { minHeight:"100vh", background:"#0a0e1a", color:"#e8eaf0", fontFamily:"'Segoe UI',sans-serif", display:"flex", flexDirection:"column", alignItems:"center", padding:"20px 12px" },
@@ -122,7 +165,14 @@ function App() {
     count: { width:28, textAlign:"right", fontSize:13, color:"#f4a227", fontWeight:700 },
     err: { color:"#e05c5c", fontSize:13, marginBottom:8 },
     sep: { borderTop:"1px solid #1e2d4a", margin:"16px 0" },
+    sync: { fontSize:11, color:"#3a9a5c", textAlign:"center", marginBottom:8 },
   };
+
+  if (loading) return (
+    <div style={{...s.wrap, justifyContent:"center"}}>
+      <div style={{color:"#7ab8f5", fontSize:18}}>読み込み中...</div>
+    </div>
+  );
 
   if (view === "home") return (
     <div style={s.wrap}>
@@ -132,6 +182,7 @@ function App() {
         <div style={{textAlign:"center",marginBottom:12}}>
           <span style={s.phaseTag}>{phaseLabels[phase]}</span>
         </div>
+        {saving && <div style={s.sync}>同期中...</div>}
         <div style={{display:"flex",flexDirection:"column",gap:10,alignItems:"center"}}>
           {(phase===PHASES.MAP_VOTING||phase===PHASES.MVP_VOTING) && (
             <button style={s.btn()} onClick={()=>{setView("player_select");setMvpSelection([]);setMapSelection(null);}}>投票する</button>
@@ -168,43 +219,44 @@ function App() {
         <div style={{textAlign:"center",marginBottom:12}}>
           <span style={s.phaseTag}>{phaseLabels[phase]}</span>
         </div>
+        {saving && <div style={s.sync}>同期中...</div>}
         <div style={s.sep}/>
         <div style={{fontWeight:700,color:"#7ab8f5",marginBottom:10}}>MAP投票</div>
         <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
           <button style={s.btn(phase===PHASES.MAP_VOTING?"#3a9a5c":"#f4a227")}
-            onClick={()=>setPhase(PHASES.MAP_VOTING)} disabled={phase===PHASES.MAP_VOTING}>
+            onClick={()=>update({...state,phase:PHASES.MAP_VOTING})} disabled={phase===PHASES.MAP_VOTING||saving}>
             MAP投票 開始
           </button>
           <button style={s.btn("#c0392b")}
-            onClick={()=>setPhase(PHASES.MAP_RESULT)} disabled={phase!==PHASES.MAP_VOTING}>
+            onClick={()=>update({...state,phase:PHASES.MAP_RESULT})} disabled={phase!==PHASES.MAP_VOTING||saving}>
             MAP投票 締め切り
           </button>
         </div>
         <div style={{fontSize:13,color:"#7a8baa",marginBottom:4}}>
-          投票済み: {Object.keys(mapVotes).length} / {PLAYERS.length}名
+          投票済み: {Object.keys(state.mapVotes).length} / {PLAYERS.length}名
         </div>
         <div style={s.sep}/>
         <div style={{fontWeight:700,color:"#7ab8f5",marginBottom:10}}>MVP投票</div>
         <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
           <button style={s.btn(phase===PHASES.MVP_VOTING?"#3a9a5c":"#f4a227")}
-            onClick={()=>setPhase(PHASES.MVP_VOTING)}
-            disabled={phase===PHASES.MVP_VOTING||phase===PHASES.WAITING_MAP||phase===PHASES.MAP_VOTING}>
+            onClick={()=>update({...state,phase:PHASES.MVP_VOTING})}
+            disabled={phase===PHASES.MVP_VOTING||phase===PHASES.WAITING_MAP||phase===PHASES.MAP_VOTING||saving}>
             MVP投票 開始
           </button>
           <button style={s.btn("#c0392b")}
-            onClick={()=>setPhase(PHASES.MVP_RESULT)} disabled={phase!==PHASES.MVP_VOTING}>
+            onClick={()=>update({...state,phase:PHASES.MVP_RESULT})} disabled={phase!==PHASES.MVP_VOTING||saving}>
             MVP投票 締め切り
           </button>
         </div>
         <div style={{fontSize:13,color:"#7a8baa",marginBottom:4}}>
-          投票済み: {Object.keys(mvpVotes).length} / {PLAYERS.length}名
+          投票済み: {Object.keys(state.mvpVotes).length} / {PLAYERS.length}名
         </div>
         <div style={s.sep}/>
         {(phase===PHASES.MAP_RESULT||phase===PHASES.MVP_RESULT) && (
           <button style={{...s.btn("#4a9eff"),marginBottom:8}} onClick={()=>setView("result")}>結果を見る</button>
         )}
         <div style={{display:"flex",gap:8}}>
-          <button style={s.btn("#c0392b")} onClick={()=>{if(window.confirm("全データをリセットしますか？"))resetAll();}}>全リセット</button>
+          <button style={s.btn("#c0392b")} disabled={saving} onClick={resetAll}>全リセット</button>
           <button style={s.btnGhost} onClick={()=>setView("home")}>ホームへ</button>
         </div>
       </div>
@@ -256,7 +308,7 @@ function App() {
         <div style={s.sub}>あなたの名前を選んでください</div>
         <div style={s.grid}>
           {PLAYERS.map(p=>{
-            const voted = phase===PHASES.MAP_VOTING ? mapVotes[p] : mvpVotes[p];
+            const voted = phase===PHASES.MAP_VOTING ? state.mapVotes[p] : state.mvpVotes[p];
             return (
               <button key={p} style={{...s.optBtn(selectedPlayer===p),opacity:voted?0.45:1}}
                 disabled={!!voted} onClick={()=>setSelectedPlayer(p)}>
@@ -285,7 +337,9 @@ function App() {
           ))}
         </div>
         <div style={{display:"flex",gap:8}}>
-          <button style={s.btn()} disabled={!mapSelection} onClick={submitMapVote}>投票する</button>
+          <button style={s.btn()} disabled={!mapSelection||saving} onClick={submitMapVote}>
+            {saving?"送信中...":"投票する"}
+          </button>
           <button style={s.btnGhost} onClick={()=>{setView("player_select");setMapSelection(null);}}>戻る</button>
         </div>
       </div>
@@ -310,7 +364,9 @@ function App() {
           ))}
         </div>
         <div style={{display:"flex",gap:8}}>
-          <button style={s.btn()} disabled={mvpSelection.length!==2} onClick={submitMvpVote}>投票する</button>
+          <button style={s.btn()} disabled={mvpSelection.length!==2||saving} onClick={submitMvpVote}>
+            {saving?"送信中...":"投票する"}
+          </button>
           <button style={s.btnGhost} onClick={()=>{setView("player_select");setMvpSelection([]);}}>戻る</button>
         </div>
       </div>
