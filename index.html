@@ -258,12 +258,12 @@ function App() {
         {(phase===PHASES.MAP_RESULT||phase===PHASES.MVP_RESULT) && (
           <button style={{...s.btn("#4a9eff"),marginBottom:8}} onClick={()=>setView("result")}>結果を見る</button>
         )}
-        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-          <button style={s.btn("#c0392b")} disabled={saving}
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          <button style={s.btn("#e67e22")} disabled={saving}
             onClick={async()=>{ if(window.confirm("MAP投票をリセットしますか？")) await update({...state,phase:PHASES.WAITING_MAP,mapVotes:{}}); }}>
-            MAPリセット
+            🗺️ MAPリセット
           </button>
-          <button style={s.btn("#c0392b")} disabled={saving} onClick={resetAll}>全リセット</button>
+          <button style={s.btn("#c0392b")} disabled={saving} onClick={resetAll}>🔄 全リセット</button>
           <button style={s.btnGhost} onClick={()=>setView("home")}>ホームへ</button>
         </div>
       </div>
